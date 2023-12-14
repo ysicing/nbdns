@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"net/url"
 	"strings"
 	"time"
 
@@ -126,21 +127,22 @@ func NewClient(opts ...ClientOption) *Client {
 
 func (c *Client) Exchange(req *dns.Msg) (r *dns.Msg, rtt time.Duration, err error) {
 	var (
-		buf, b64 []byte
-		begin    = time.Now()
-		origID   = req.Id
+		buf    []byte
+		begin  = time.Now()
+		origID = req.Id
 	)
 
 	// Set DNS ID as zero accoreding to RFC8484 (cache friendly)
 	req.Id = 0
 	buf, err = req.Pack()
-	b64 = make([]byte, base64.StdEncoding.EncodedLen(len(buf)))
 	if err != nil {
 		return
 	}
-	base64.StdEncoding.Encode(b64, buf)
-
-	hreq, _ := http.NewRequestWithContext(c.traceCtx, http.MethodGet, c.opt.server+"?dns="+string(b64), nil)
+	query := base64.RawURLEncoding.EncodeToString(buf)
+	hreq, _ := http.NewRequestWithContext(c.traceCtx, http.MethodGet, c.opt.server, nil)
+	values := make(url.Values, 1)
+	values.Set("dns", query)
+	hreq.URL.RawQuery = values.Encode()
 	hreq.Header.Add("Accept", dohMediaType)
 	hreq.Header.Add("User-Agent", "nbdns-doh-client/0.1")
 
